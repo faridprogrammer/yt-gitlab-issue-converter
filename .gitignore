@@ -1,2 +1,4 @@
 ﻿_main.go
 *.csv
+cmd/converter/config.json
+main.exe

@@ -2,24 +2,44 @@ package main
 
 import (
 	"encoding/csv"
+	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
 )
 
-var youtrackToGitLabUserMap = map[string]string{}
+type Config struct {
+	SrcPath               string
+	DestPath              string
+	YoutrackToGitlabUser  map[string]string
+	YoutrackToGitlabType  map[string]string
+	YoutrackToGitlabState map[string]string
+}
 
-var youtrackToGitLabTypeMap = map[string]string{}
-
-var youtrackToGitLabStateMap = map[string]string{}
+var configObj Config
 
 func main() {
-	// Replace these file paths with your input and output file paths
-	youtrackCSVPath := `SOURCE PATH`
-	gitlabCSVPath := `DEST PATH`
+	configPath := flag.String("c", "config.json", "Path to config file")
+
+	flag.Parse()
+
+	configContent, err := os.ReadFile(*configPath)
+
+	if err != nil {
+		fmt.Println("Error in opening config file:", err)
+		return
+	}
+
+	err = json.Unmarshal(configContent, &configObj)
+
+	if err != nil {
+		fmt.Println("Error in reading config file:", err)
+		return
+	}
 
 	// Open YouTrack CSV file
-	youtrackFile, err := os.Open(youtrackCSVPath)
+	youtrackFile, err := os.Open(configObj.SrcPath)
 	if err != nil {
 		fmt.Println("Error opening YouTrack CSV file:", err)
 		return
@@ -27,7 +47,7 @@ func main() {
 	defer youtrackFile.Close()
 
 	// Open GitLab CSV file for writing
-	gitlabFile, err := os.Create(gitlabCSVPath)
+	gitlabFile, err := os.Create(configObj.DestPath)
 	if err != nil {
 		fmt.Println("Error creating GitLab CSV file:", err)
 		return
@@ -84,7 +104,7 @@ func main() {
 	// Flush the writer to ensure all data is written to the file
 	gitlabWriter.Flush()
 
-	fmt.Println("Conversion completed. GitLab import CSV file created at:", gitlabCSVPath)
+	fmt.Println("Conversion completed. GitLab import CSV file created at:", configObj.DestPath)
 }
 
 func getGitlabHeader() []string {
@@ -104,13 +124,13 @@ func mapYouTrackToGitLab(youtrackRow []string) ([]string, bool) {
 	gitlabRow := make([]string, len(youtrackRow))
 
 	yt_id := strings.TrimSpace(youtrackRow[0])
-	yt_project := strings.TrimSpace(youtrackRow[1])
-	yt_summary := "[YT_ID " + yt_id + "]" + " [" + yt_project + "] " + strings.TrimSpace(youtrackRow[2])
+	// yt_project := strings.TrimSpace(youtrackRow[1])
+	yt_summary := yt_id + " " + strings.TrimSpace(youtrackRow[2])
 	yt_reporter := strings.TrimSpace(youtrackRow[3])
 	yt_type := strings.TrimSpace(youtrackRow[4])
 	yt_state := strings.TrimSpace(youtrackRow[5])
 	yt_assignee := strings.TrimSpace(youtrackRow[6])
-	yt_description := "[Reported By: " + yt_reporter + "] " + strings.TrimSpace(youtrackRow[7])
+	yt_description := "[Reported By: " + yt_reporter + "] \n" + strings.TrimSpace(youtrackRow[7])
 
 	if yt_type == "" {
 		return nil, false
@@ -119,13 +139,13 @@ func mapYouTrackToGitLab(youtrackRow []string) ([]string, bool) {
 	// Map YouTrack Summary to GitLab title
 	gitlabRow[0] = yt_summary
 
-	if gitlabAssignee, ok := youtrackToGitLabUserMap[yt_assignee]; ok {
+	if gitlabAssignee, ok := configObj.YoutrackToGitlabUser[yt_assignee]; ok {
 		yt_description = yt_description + "\n" + "/assign " + gitlabAssignee + "\n"
 	}
-	if gitlabType, ok := youtrackToGitLabTypeMap[yt_type]; ok {
+	if gitlabType, ok := configObj.YoutrackToGitlabType[yt_type]; ok {
 		yt_description = yt_description + "\n" + "/label " + gitlabType + "\n"
 	}
-	if gitlabState, ok := youtrackToGitLabStateMap[yt_state]; ok {
+	if gitlabState, ok := configObj.YoutrackToGitlabState[yt_state]; ok {
 		yt_description = yt_description + "\n" + "/label " + gitlabState + "\n"
 	}
 
